@@ -1213,6 +1213,16 @@ win_line(
     int		did_line = FALSE;	// set to TRUE when line text done
     int		text_prop_count;
     int		last_textprop_text_idx = -1;
+    int		first_right_idx = -1;	// index of the first "right" aligned
+					// text property; one of them shares the
+					// screen line with the text, each of
+					// the others uses a line of its own
+    int		right_prop_done = FALSE;  // the "right" aligned text property
+					  // sharing the screen line with the
+					  // text was dealt with
+    int		skip_right_prop = FALSE;  // the text used the whole screen
+					  // line, drop the "right" aligned
+					  // text property that shares it
     int		text_prop_next = 0;	// next text property to use
     textprop_T	text_props_buf[WIN_LINE_TEXT_PROP_STACK_LEN];
     int		text_prop_idxs_buf[WIN_LINE_TEXT_PROP_STACK_LEN];
@@ -1775,6 +1785,20 @@ win_line(
 			++wlv.text_prop_above_count;
 		}
 
+	    // The first "right" aligned text property is displayed after the
+	    // text of the line, the following ones each use a screen line of
+	    // their own.  Must match what prop_count_above_below() counts.
+	    for (int i = 0; i < text_prop_count; ++i)
+		if (text_props[i].tp_col == MAXCOL
+			   && (text_props[i].tp_flags & TP_FLAG_ALIGN_RIGHT))
+		{
+		    first_right_idx = i;
+		    break;
+		}
+
+	    // Flags for the text properties from index "i" onwards: 1 if one of
+	    // them is displayed after the text, 2 if one of them uses a screen
+	    // line of its own.
 	    text_prop_suffix_flags[text_prop_count] = 0;
 	    for (int i = text_prop_count - 1; i >= 0; --i)
 	    {
@@ -1783,7 +1807,9 @@ win_line(
 		if (text_props[i].tp_col == MAXCOL)
 		{
 		    flags |= 1;
-		    if (text_props[i].tp_flags & TP_FLAG_ALIGN_BELOW)
+		    if ((text_props[i].tp_flags & TP_FLAG_ALIGN_BELOW)
+			    || ((text_props[i].tp_flags & TP_FLAG_ALIGN_RIGHT)
+						     && i != first_right_idx))
 			flags |= 2;
 		}
 		text_prop_suffix_flags[i] = flags;
@@ -2195,11 +2221,13 @@ win_line(
 			    break;
 			else
 			{
-			    // With 'nowrap' and not in the first screen line only "below"
-			    // text prop can show.
+			    // With 'nowrap' and not in the first screen line
+			    // only a text prop that can use a screen line of
+			    // its own can show: "below" and "right" aligned.
 			    active = wp->w_p_wrap
 				  || wlv.row == startrow
-				  || (tp->tp_flags & TP_FLAG_ALIGN_BELOW);
+				  || (tp->tp_flags & (TP_FLAG_ALIGN_BELOW
+						      | TP_FLAG_ALIGN_RIGHT));
 			}
 		    }
 		    else
@@ -2308,6 +2336,21 @@ win_line(
 			// reset the ID in the copy to avoid it being used
 			// again
 			tp->tp_id = -MAXCOL;
+
+			if (tp->tp_flags & TP_FLAG_ALIGN_RIGHT)
+			{
+			    // This is the "right" aligned text property that
+			    // is displayed after the text of the line.  When
+			    // the text used the whole screen line there was no
+			    // room for it, drop it and let the next one use
+			    // this screen line.
+			    int no_room = skip_right_prop;
+
+			    right_prop_done = TRUE;
+			    skip_right_prop = FALSE;
+			    if (no_room)
+				continue;
+			}
 
 			if (p != NULL)
 			{
@@ -2452,13 +2495,15 @@ win_line(
 
 		    // Use the displayed width so a double-width or <Tab> last
 		    // character filling the rightmost column is detected too.
-		    int only_below_follows = !wp->w_p_wrap
+		    // When no room is left only a text property that uses a
+		    // screen line of its own can still be displayed.
+		    int needs_own_line = !wp->w_p_wrap
 				 && wlv.col + win_chartabsize(wp, ptr, wlv.vcol)
 								>= wp->w_width;
 		    int suffix_flags = text_prop_suffix_flags[text_prop_next];
 
 		    text_prop_follows = (suffix_flags
-					& (only_below_follows ? 2 : 1)) != 0;
+					   & (needs_own_line ? 2 : 1)) != 0;
 		}
 	    }
 
@@ -4434,6 +4479,12 @@ win_line(
 #ifdef FEAT_PROP_POPUP
 	    if (!wp->w_p_wrap && text_prop_follows && !text_prop_above)
 	    {
+		// The text of the line used the whole screen line, there was
+		// no room for the "right" aligned text property that goes
+		// after it.
+		if (!right_prop_done)
+		    skip_right_prop = TRUE;
+
 		// do not output more of the line, only the "below" prop
 		ptr = line + (size_t)ml_get_buf_len(wp->w_buffer, lnum);
 # ifdef FEAT_LINEBREAK
