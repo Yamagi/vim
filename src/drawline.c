@@ -1230,6 +1230,8 @@ win_line(
     int		text_prop_flags = 0;
     int		text_prop_above = FALSE;  // first doing virtual text above
     int		text_prop_follows = FALSE;  // another text prop to display
+    int		text_prop_start_bcol = 0;   // byte column where the displayed
+					    // part of the line starts
     int		saved_search_attr = 0;	// search_attr to be used when n_extra
 					// goes to zero
     int		saved_area_attr = 0;	// idem for area_attr
@@ -1836,6 +1838,11 @@ win_line(
 
 	init_chartabsize_arg(&cts, wp, lnum, wlv.vcol, line, ptr);
 	cts.cts_max_head_vcol = v;
+#ifdef FEAT_PROP_POPUP
+	// With 'nowrap' the virtual text above the line is displayed in its
+	// own screen line(s), "w_leftcol" does not scroll it away.
+	cts.cts_no_above = !wp->w_p_wrap;
+#endif
 	while (cts.cts_vcol < v)
 	{
 	    head = 0;
@@ -1894,6 +1901,11 @@ win_line(
 	}
 	if (v > wlv.vcol)
 	    skip_cells = v - wlv.vcol - head;
+#ifdef FEAT_PROP_POPUP
+	// The virtual text above the line is displayed even when the text it
+	// belongs to is scrolled out of sight.
+	text_prop_start_bcol = (int)(ptr - line);
+#endif
 
 	// Adjust for when the inverted text is before the screen,
 	// and when the start of the inverted text is before the screen.
@@ -2189,7 +2201,8 @@ win_line(
 		    textprop_T *tp = &text_props[text_prop_next];
 		    if (tp->tp_col == MAXCOL)
 		    {
-			if (bcol == 0 && (tp->tp_flags & TP_FLAG_ALIGN_ABOVE))
+			if (bcol == text_prop_start_bcol
+				     && (tp->tp_flags & TP_FLAG_ALIGN_ABOVE))
 			    active = TRUE;
 			else if (*ptr != NUL)
 			    break;
@@ -2401,8 +2414,9 @@ win_line(
 			}
 
 			// If the text didn't reach until the first window
-			// column we need to skip cells.
-			if (skip_cells > 0)
+			// column we need to skip cells.  With 'nowrap' the
+			// virtual text above the line is not scrolled.
+			if (skip_cells > 0 && (wp->w_p_wrap || !above))
 			{
 			    if (wlv.n_extra > skip_cells)
 			    {
@@ -3854,6 +3868,9 @@ win_line(
 		&& wp->w_p_list
 		&& (wp->w_p_wrap ? (wp->w_skipcol > 0 && wlv.row == 0)
 				 : wp->w_leftcol > 0)
+#ifdef FEAT_PROP_POPUP
+		&& !text_prop_above
+#endif
 #ifdef FEAT_DIFF
 		&& wlv.filler_todo <= 0
 #endif
@@ -4090,8 +4107,14 @@ win_line(
 #endif
 
 	// Store character to be displayed.
-	// Skip characters that are left of the screen for 'nowrap'.
-	if (wlv.draw_state < WL_LINE || skip_cells <= 0)
+	// Skip characters that are left of the screen for 'nowrap'.  With
+	// 'nowrap' the virtual text above the line is not scrolled, it is
+	// never skipped.
+	if (wlv.draw_state < WL_LINE || skip_cells <= 0
+#ifdef FEAT_PROP_POPUP
+		|| (text_prop_above && !wp->w_p_wrap)
+#endif
+	   )
 	{
 	    // Store the character.
 #if defined(FEAT_RIGHTLEFT)

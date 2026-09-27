@@ -3524,6 +3524,91 @@ func Test_prop_with_text_above_screenpos()
   bwipe!
 endfunc
 
+func Test_prop_with_text_above_nowrap_scroll()
+  call NewWindow(10, 40)
+  setlocal nowrap
+  call setline(1, ['AAAAAAAAAABBBBBBBBBBCCCCCCCCCCDDDDDDDDDDEEEEEEEEEEFFFFFFFFFF',
+        \ 'GGGGGGGGGGHHHHHHHHHHIIIIIIIIIIJJJJJJJJJJKKKKKKKKKKLLLLLLLLLL',
+        \ 'MMMMMMMMMMNNNNNNNNNNOOOOOOOOOOPPPPPPPPPPQQQQQQQQQQRRRRRRRRRR'])
+  call prop_type_add('test', #{highlight: 'Normal'})
+  call prop_add(1, 0, #{type: 'test', text: 'Example', text_align: 'above'})
+
+  let winid = win_getid()
+
+  " The start of the line fits in the window, no horizontal scrolling.  The
+  " virtual text is displayed above the buffer text.
+  call cursor(1, 40)
+  redraw
+  call assert_equal(0, winsaveview().leftcol)
+  call assert_equal([2, 40], [winline(), wincol()])
+  call assert_equal(#{row: 2, col: 40, endcol: 40, curscol: 40},
+        \ screenpos(winid, 1, 40))
+  call assert_equal(['Example', 'AAAAAAAAAABBBBBBBBBBCCCCCCCCCCDDDDDDDDDD',
+        \ 'GGGGGGGGGGHHHHHHHHHHIIIIIIIIIIJJJJJJJJJJ',
+        \ 'MMMMMMMMMMNNNNNNNNNNOOOOOOOOOOPPPPPPPPPP'],
+        \ ScreenLines([1, 4], 40)->map({_, v -> substitute(v, '\s*$', '', '')}))
+
+  " Moving one character to the right scrolls the text.  The virtual text
+  " stays in place and the cursor stays below it.
+  call cursor(1, 41)
+  redraw
+  call assert_equal(20, winsaveview().leftcol)
+  call assert_equal([2, 21], [winline(), wincol()])
+  call assert_equal(#{row: 2, col: 21, endcol: 21, curscol: 21},
+        \ screenpos(winid, 1, 41))
+  call assert_equal(['Example', 'CCCCCCCCCCDDDDDDDDDDEEEEEEEEEEFFFFFFFFFF',
+        \ 'IIIIIIIIIIJJJJJJJJJJKKKKKKKKKKLLLLLLLLLL',
+        \ 'OOOOOOOOOOPPPPPPPPPPQQQQQQQQQQRRRRRRRRRR'],
+        \ ScreenLines([1, 4], 40)->map({_, v -> substitute(v, '\s*$', '', '')}))
+
+  " Moving back to the start of the line scrolls the text back.
+  call cursor(1, 1)
+  redraw
+  call assert_equal(0, winsaveview().leftcol)
+  call assert_equal([2, 1], [winline(), wincol()])
+  call assert_equal(#{row: 2, col: 1, endcol: 1, curscol: 1},
+        \ screenpos(winid, 1, 1))
+  call assert_equal(['Example', 'AAAAAAAAAABBBBBBBBBBCCCCCCCCCCDDDDDDDDDD',
+        \ 'GGGGGGGGGGHHHHHHHHHHIIIIIIIIIIJJJJJJJJJJ',
+        \ 'MMMMMMMMMMNNNNNNNNNNOOOOOOOOOOPPPPPPPPPP'],
+        \ ScreenLines([1, 4], 40)->map({_, v -> substitute(v, '\s*$', '', '')}))
+
+  call prop_type_delete('test')
+  bwipe!
+endfunc
+
+func Test_prop_with_text_above_nowrap_scrolled_out()
+  call NewWindow(10, 40)
+  setlocal nowrap
+  call setline(1, ['AAAAAAAAAABBBBBBBBBBCCCCCCCCCCDDDDDDDDDDEEEEEEEEEE'
+        \ .. 'FFFFFFFFFFGGGGGGGGGGHHHHHHHHHHIIIIIIIIIIJJJJJJJJJJ', 'short'])
+  call prop_type_add('test', #{highlight: 'Normal'})
+  call prop_add(1, 0, #{type: 'test', text: 'Above one', text_align: 'above'})
+  call prop_add(2, 0, #{type: 'test', text: 'Above two', text_align: 'above'})
+
+  " Scrolling further to the right than the width of the virtual text does not
+  " scroll the virtual text.  This also shows the virtual text above a line
+  " that is scrolled out of sight completely.
+  call cursor(1, 100)
+  redraw
+  call assert_equal(79, winsaveview().leftcol)
+  call assert_equal([2, 21], [winline(), wincol()])
+  call assert_equal(#{row: 2, col: 21, endcol: 21, curscol: 21},
+        \ screenpos(win_getid(), 1, 100))
+  call assert_equal(['Above one', 'HIIIIIIIIIIJJJJJJJJJJ', 'Above two', ''],
+        \ ScreenLines([1, 4], 40)->map({_, v -> substitute(v, '\s*$', '', '')}))
+
+  " The 'listchars' "precedes" character is displayed before the buffer text,
+  " not before the virtual text.
+  setlocal list listchars=eol:$,precedes:<
+  redraw
+  call assert_equal(['Above one', '<IIIIIIIIIIJJJJJJJJJJ$', 'Above two', '<'],
+        \ ScreenLines([1, 4], 40)->map({_, v -> substitute(v, '\s*$', '', '')}))
+
+  call prop_type_delete('test')
+  bwipe!
+endfunc
+
 func Test_prop_with_text_below_after_match()
   CheckScreendump
   CheckRunVimInTerminal
