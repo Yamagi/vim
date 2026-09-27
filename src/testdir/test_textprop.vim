@@ -3524,6 +3524,59 @@ func Test_prop_with_text_above_screenpos()
   bwipe!
 endfunc
 
+func Test_prop_with_text_right_nowrap()
+  call NewWindow(6, 30)
+  setlocal nowrap
+  call setline(1, [repeat('A', 29), 'second', 'third', 'fourth'])
+  call prop_type_add('test', #{highlight: 'Normal'})
+  call prop_add(1, 0, #{type: 'test', text: 'msg one', text_align: 'right'})
+  call prop_add(1, 0, #{type: 'test', text: 'msg two', text_align: 'right'})
+
+  let winid = win_getid()
+
+  " Only one cell is left for the first virtual text, it is truncated.  The
+  " second one is displayed on the next screen line, thus the buffer line
+  " takes two screen lines.
+  call assert_equal([repeat('A', 29) .. 'm', repeat(' ', 23) .. 'msg two',
+        \ 'second', 'third', 'fourth'],
+        \ ScreenLines([1, 5], 30)->map({_, v -> substitute(v, '\s*$', '', '')}))
+  call assert_equal(#{row: 3, col: 1, endcol: 1, curscol: 1},
+        \ screenpos(winid, 2, 1))
+  call assert_equal(#{row: 5, col: 1, endcol: 1, curscol: 1},
+        \ screenpos(winid, 4, 1))
+
+  " The buffer text now fills the whole window line, no cell is left for the
+  " first virtual text.  The second one is still displayed on the next screen
+  " line and the buffer line still takes two screen lines.
+  call prop_clear(1)
+  call setline(1, repeat('A', 40))
+  call prop_add(1, 0, #{type: 'test', text: 'msg one', text_align: 'right'})
+  call prop_add(1, 0, #{type: 'test', text: 'msg two', text_align: 'right'})
+  call assert_equal([repeat('A', 30), repeat(' ', 23) .. 'msg two',
+        \ 'second', 'third', 'fourth'],
+        \ ScreenLines([1, 5], 30)->map({_, v -> substitute(v, '\s*$', '', '')}))
+  call assert_equal(#{row: 3, col: 1, endcol: 1, curscol: 1},
+        \ screenpos(winid, 2, 1))
+  call assert_equal(#{row: 5, col: 1, endcol: 1, curscol: 1},
+        \ screenpos(winid, 4, 1))
+
+  " Three virtual texts and a buffer line that exactly fills the window line:
+  " the first one has no room, the other two use a screen line each.
+  call prop_clear(1)
+  call setline(1, repeat('A', 30))
+  call prop_add(1, 0, #{type: 'test', text: 'msg one', text_align: 'right'})
+  call prop_add(1, 0, #{type: 'test', text: 'msg two', text_align: 'right'})
+  call prop_add(1, 0, #{type: 'test', text: 'msg three', text_align: 'right'})
+  call assert_equal([repeat('A', 30), repeat(' ', 23) .. 'msg two',
+        \ repeat(' ', 21) .. 'msg three', 'second', 'third', 'fourth'],
+        \ ScreenLines([1, 6], 30)->map({_, v -> substitute(v, '\s*$', '', '')}))
+  call assert_equal(#{row: 4, col: 1, endcol: 1, curscol: 1},
+        \ screenpos(winid, 2, 1))
+
+  call prop_type_delete('test')
+  bwipe!
+endfunc
+
 func Test_prop_with_text_below_after_match()
   CheckScreendump
   CheckRunVimInTerminal
