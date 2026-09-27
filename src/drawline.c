@@ -662,6 +662,37 @@ textprop_size_after_trunc(
 }
 
 /*
+ * With 'nowrap' the virtual text "above" scrolls with the buffer text.  Skip
+ * the padding and the text that is left of the window.
+ */
+    static void
+text_prop_above_skip_leftcol(
+	win_T	*wp,
+	int	*padding,
+	int	*n_extra,
+	char_u	**p_extra)
+{
+    int	    skip = wp->w_leftcol - *padding;
+    char_u  *p = *p_extra;
+
+    if (skip <= 0)
+    {
+	*padding = -skip;
+	return;
+    }
+    while (skip > 0 && *p != NUL)
+    {
+	skip -= ptr2cells(p);
+	p += (*mb_ptr2len)(p);
+    }
+    // A double-width character that is partly left of the window is
+    // replaced with padding.
+    *padding = skip < 0 ? -skip : 0;
+    *n_extra -= (int)(p - *p_extra);
+    *p_extra = p;
+}
+
+/*
  * Take care of padding, right-align and truncation of virtual text after a
  * line.
  * if "n_attr" is not NULL then "n_extra" and "p_extra" are adjusted for any
@@ -690,10 +721,17 @@ text_prop_position(
     int	    room = wp->w_width - col_with_padding;
     int	    before = room;	// spaces before the text
     int	    after = 0;		// spaces after the text
-    int	    n_used = *n_extra;
+    int	    n_used;
     char_u  *l = NULL;
-    int	    strsize = vim_strsize(*p_extra);
-    int	    cells = wrap ? strsize : textprop_size_after_trunc(wp,
+    int	    strsize;
+    int	    cells;
+
+    if (above && !wp->w_p_wrap && n_attr != NULL)
+	text_prop_above_skip_leftcol(wp, &padding, n_extra, p_extra);
+
+    n_used = *n_extra;
+    strsize = vim_strsize(*p_extra);
+    cells = wrap ? strsize : textprop_size_after_trunc(wp,
 			     tp->tp_flags, before, padding, *p_extra, &n_used);
 
     if (wrap || right || above || below || padding > 0 || n_used < *n_extra)
@@ -1230,6 +1268,8 @@ win_line(
     int		text_prop_flags = 0;
     int		text_prop_above = FALSE;  // first doing virtual text above
     int		text_prop_follows = FALSE;  // another text prop to display
+    int		text_prop_start_bcol = 0;   // byte column where the displayed
+					    // part of the line starts
     int		saved_search_attr = 0;	// search_attr to be used when n_extra
 					// goes to zero
     int		saved_area_attr = 0;	// idem for area_attr
@@ -1896,6 +1936,11 @@ win_line(
 	}
 	if (v > wlv.vcol)
 	    skip_cells = v - wlv.vcol - head;
+#ifdef FEAT_PROP_POPUP
+	// The virtual text above the line is displayed even when the text it
+	// belongs to is scrolled out of sight.
+	text_prop_start_bcol = (int)(ptr - line);
+#endif
 
 	// Adjust for when the inverted text is before the screen,
 	// and when the start of the inverted text is before the screen.
@@ -2191,7 +2236,8 @@ win_line(
 		    textprop_T *tp = &text_props[text_prop_next];
 		    if (tp->tp_col == MAXCOL)
 		    {
-			if (bcol == 0 && (tp->tp_flags & TP_FLAG_ALIGN_ABOVE))
+			if (bcol == text_prop_start_bcol
+				&& (tp->tp_flags & TP_FLAG_ALIGN_ABOVE))
 			    active = TRUE;
 			else if (*ptr != NUL)
 			    break;
@@ -2404,7 +2450,7 @@ win_line(
 
 			// If the text didn't reach until the first window
 			// column we need to skip cells.
-			if (skip_cells > 0)
+			if (skip_cells > 0 && (wp->w_p_wrap || !above))
 			{
 			    if (wlv.n_extra > skip_cells)
 			    {
@@ -3856,6 +3902,9 @@ win_line(
 		&& wp->w_p_list
 		&& (wp->w_p_wrap ? (wp->w_skipcol > 0 && wlv.row == 0)
 				 : wp->w_leftcol > 0)
+#ifdef FEAT_PROP_POPUP
+		&& !text_prop_above
+#endif
 #ifdef FEAT_DIFF
 		&& wlv.filler_todo <= 0
 #endif
@@ -4093,7 +4142,11 @@ win_line(
 
 	// Store character to be displayed.
 	// Skip characters that are left of the screen for 'nowrap'.
-	if (wlv.draw_state < WL_LINE || skip_cells <= 0)
+	if (wlv.draw_state < WL_LINE || skip_cells <= 0
+#ifdef FEAT_PROP_POPUP
+		|| (text_prop_above && !wp->w_p_wrap)
+#endif
+	   )
 	{
 	    // Store the character.
 #if defined(FEAT_RIGHTLEFT)
