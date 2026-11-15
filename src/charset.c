@@ -1414,7 +1414,9 @@ win_lbr_chartabsize(
 		    {
 			int n_extra = (int)STRLEN(p);
 
-			cells = text_prop_position(wp, tp, vcol,
+			// Include the size of a previous virtual text, the
+			// line is not empty for "below" then.
+			cells = text_prop_position(wp, tp, vcol + size,
 			     (vcol + size) % (wp->w_width - col_off) + col_off,
 					      &n_extra, &p, NULL, NULL, FALSE);
 #  ifdef FEAT_LINEBREAK
