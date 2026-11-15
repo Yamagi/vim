@@ -628,6 +628,20 @@ handle_showbreak_and_filler(win_T *wp, winlinevars_T *wlv)
 
 #if defined(FEAT_PROP_POPUP)
 /*
+ * Return the number of cells left in the screen line, including the current
+ * column.  With 'rightleft' the columns count down.
+ */
+    static int
+wlv_cells_left(win_T *wp, winlinevars_T *wlv)
+{
+# ifdef FEAT_RIGHTLEFT
+    if (wp->w_p_rl)
+	return wlv->col + 1;
+# endif
+    return wp->w_width - wlv->col;
+}
+
+/*
  * Return the cell size of virtual text after truncation.
  */
     static int
@@ -2520,18 +2534,19 @@ win_line(
 		}
 		else if (text_prop_next < text_prop_count
 			   && ((*ptr != NUL && ptr[mb_ptr2len(ptr)] == NUL)
-			       || (!wp->w_p_wrap && wlv.col == wp->w_width - 1)))
+			       || (!wp->w_p_wrap
+					     && wlv_cells_left(wp, &wlv) == 1)))
 		{
 		    // When at last-but-one character and a text property
 		    // follows after it, we may need to flush the line after
 		    // displaying that character.
-		    // Or when not wrapping and at the rightmost column.
+		    // Or when not wrapping and at the last column.
 
 		    // Use the displayed width so a double-width or <Tab> last
-		    // character filling the rightmost column is detected too.
+		    // character filling the last column is detected too.
 		    int only_below_follows = !wp->w_p_wrap
-				 && wlv.col + win_chartabsize(wp, ptr, wlv.vcol)
-								>= wp->w_width;
+				 && win_chartabsize(wp, ptr, wlv.vcol)
+						   >= wlv_cells_left(wp, &wlv);
 		    int suffix_flags = text_prop_suffix_flags[text_prop_next];
 
 		    text_prop_follows = (suffix_flags
