@@ -2528,10 +2528,15 @@ win_line(
 			if ((tp->tp_flags
 				 & (TP_FLAG_ALIGN_ABOVE | TP_FLAG_ALIGN_BELOW)) == 0)
 			    did_line = TRUE;
+			// With 'nowrap' the first "right" text prop stays in
+			// the line of the text.
 			text_prop_follows |= other_tpi != -1
 					&& (wp->w_p_wrap
 					     || (text_props[other_tpi].tp_flags
-			       & (TP_FLAG_ALIGN_BELOW | TP_FLAG_ALIGN_RIGHT)));
+							& TP_FLAG_ALIGN_BELOW)
+					     || (other_tpi != text_prop_first_right
+						 && (text_props[other_tpi].tp_flags
+							& TP_FLAG_ALIGN_RIGHT)));
 
 			if (bail_out)
 			    // starting a new line for "below"

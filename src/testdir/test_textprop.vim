@@ -4180,6 +4180,77 @@ func Test_prop_with_text_right_below_empty_line()
   bwipe!
 endfunc
 
+func Test_prop_with_text_after_right_nowrap()
+  call NewWindow(10, 40)
+  setlocal nowrap
+  call prop_type_add('test', #{highlight: 'Normal'})
+  let winid = win_getid()
+
+  " "after" fills the window, "right" is truncated like with a shorter line
+  for [len, line2] in [[33, repeat('x', 33) .. 'AfterRi'],
+        \ [35, repeat('x', 35) .. 'After'], [36, repeat('x', 36) .. 'Afte']]
+    call setline(1, ['line 1', repeat('x', len), 'line 3', 'line 4'])
+    call prop_add(2, 0, #{type: 'test', text: 'After'})
+    call prop_add(2, 0, #{type: 'test', text: 'Right', text_align: 'right'})
+    call cursor(3, 1)
+    redraw
+    call assert_equal(#{row: 3, col: 1, endcol: 1, curscol: 1},
+          \ screenpos(winid, 3, 1), len)
+    call assert_equal([3, 1], [winline(), wincol()], len)
+    call assert_equal(['line 1', line2, 'line 3', 'line 4'],
+          \ ScreenLines([1, 4], 40)->map({_, v -> substitute(v, '\s*$', '', '')}),
+          \ len)
+    call prop_remove(#{type: 'test', all: v:true})
+  endfor
+
+  call setline(1, ['line 1', repeat('x', 35), 'line 3', 'line 4'])
+
+  " with "above"
+  call prop_add(2, 0, #{type: 'test', text: 'Above', text_align: 'above',
+        \ text_padding_left: 0})
+  call prop_add(2, 0, #{type: 'test', text: 'After'})
+  call prop_add(2, 0, #{type: 'test', text: 'Right', text_align: 'right'})
+  call cursor(3, 1)
+  redraw
+  call assert_equal(#{row: 4, col: 1, endcol: 1, curscol: 1},
+        \ screenpos(winid, 3, 1))
+  call assert_equal([4, 1], [winline(), wincol()])
+  call assert_equal(['line 1', 'Above', repeat('x', 35) .. 'After', 'line 3',
+        \ 'line 4'],
+        \ ScreenLines([1, 5], 40)->map({_, v -> substitute(v, '\s*$', '', '')}))
+  call prop_remove(#{type: 'test', all: v:true})
+
+  " with "below"
+  call prop_add(2, 0, #{type: 'test', text: 'After'})
+  call prop_add(2, 0, #{type: 'test', text: 'Right', text_align: 'right'})
+  call prop_add(2, 0, #{type: 'test', text: 'Below', text_align: 'below'})
+  call cursor(3, 1)
+  redraw
+  call assert_equal(#{row: 4, col: 1, endcol: 1, curscol: 1},
+        \ screenpos(winid, 3, 1))
+  call assert_equal([4, 1], [winline(), wincol()])
+  call assert_equal(['line 1', repeat('x', 35) .. 'After', 'Below', 'line 3',
+        \ 'line 4'],
+        \ ScreenLines([1, 5], 40)->map({_, v -> substitute(v, '\s*$', '', '')}))
+  call prop_remove(#{type: 'test', all: v:true})
+
+  " a second "right" goes below
+  call prop_add(2, 0, #{type: 'test', text: 'After'})
+  call prop_add(2, 0, #{type: 'test', text: 'Right 1', text_align: 'right'})
+  call prop_add(2, 0, #{type: 'test', text: 'Right 2', text_align: 'right'})
+  call cursor(3, 1)
+  redraw
+  call assert_equal(#{row: 4, col: 1, endcol: 1, curscol: 1},
+        \ screenpos(winid, 3, 1))
+  call assert_equal([4, 1], [winline(), wincol()])
+  call assert_equal(['line 1', repeat('x', 35) .. 'After',
+        \ repeat(' ', 33) .. 'Right 2', 'line 3', 'line 4'],
+        \ ScreenLines([1, 5], 40)->map({_, v -> substitute(v, '\s*$', '', '')}))
+
+  call prop_type_delete('test')
+  bwipe!
+endfunc
+
 func Test_prop_with_text_below_after_match()
   CheckScreendump
   CheckRunVimInTerminal
