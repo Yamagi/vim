@@ -2272,6 +2272,7 @@ win_line(
 		    text_prop_id = 0;
 		    reset_extra_attr = FALSE;
 		}
+		int check_follows = TRUE;
 		if (text_props_active > 0 && wlv.n_extra == 0)
 		{
 		    int used_tpi = -1;
@@ -2482,8 +2483,11 @@ win_line(
 			    // starting a new line for "below"
 			    continue;
 		    }
+
+		    // No virtual text is inserted, check if a text prop follows
+		    check_follows = wlv.n_extra == 0 && !text_prop_follows;
 		}
-		else if (text_prop_next < text_prop_count
+		if (check_follows && text_prop_next < text_prop_count
 			   && ((*ptr != NUL && ptr[mb_ptr2len(ptr)] == NUL)
 			       || (!wp->w_p_wrap && wlv.col == wp->w_width - 1)))
 		{
