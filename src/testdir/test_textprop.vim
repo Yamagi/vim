@@ -4295,6 +4295,50 @@ func Test_prop_with_text_after_nowrap_scrolled()
   bwipe!
 endfunc
 
+func Test_prop_with_text_above_after_nowrap()
+  call NewWindow(10, 40)
+  call prop_type_add('test', #{highlight: 'Normal'})
+  let winid = win_getid()
+
+  " "after" is displayed below "above", with 'wrap' and 'nowrap' alike
+  for opt in ['wrap', 'nowrap']
+    exe 'setlocal ' .. opt
+    for [len, pad] in [[5, 0], [5, 3], [35, 0]]
+      let msg = opt .. ' ' .. len .. ' ' .. pad
+      call setline(1, ['line 1', repeat('x', len), 'line 3', 'line 4'])
+      call prop_add(2, 0, #{type: 'test', text: 'Above', text_align: 'above',
+            \ text_padding_left: pad})
+      call prop_add(2, 0, #{type: 'test', text: 'After'})
+      call cursor(3, 1)
+      redraw
+      call assert_equal(#{row: 4, col: 1, endcol: 1, curscol: 1},
+            \ screenpos(winid, 3, 1), msg)
+      call assert_equal([4, 1], [winline(), wincol()], msg)
+      call assert_equal(['line 1', repeat(' ', pad) .. 'Above',
+            \ repeat('x', len) .. 'After', 'line 3', 'line 4'],
+            \ ScreenLines([1, 5], 40)->map({_, v -> substitute(v, '\s*$', '', '')}),
+            \ msg)
+      call prop_remove(#{type: 'test', all: v:true})
+    endfor
+
+    " two "after" texts
+    call setline(1, ['line 1', 'xxxxx', 'line 3', 'line 4'])
+    call prop_add(2, 0, #{type: 'test', text: 'Above', text_align: 'above'})
+    call prop_add(2, 0, #{type: 'test', text: 'After1'})
+    call prop_add(2, 0, #{type: 'test', text: 'After2'})
+    call cursor(3, 1)
+    redraw
+    call assert_equal(['line 1', 'Above', 'xxxxxAfter1After2', 'line 3',
+          \ 'line 4'],
+          \ ScreenLines([1, 5], 40)->map({_, v -> substitute(v, '\s*$', '', '')}),
+          \ opt)
+    call prop_remove(#{type: 'test', all: v:true})
+  endfor
+
+  call prop_type_delete('test')
+  bwipe!
+endfunc
+
 func Test_prop_with_text_below_after_match()
   CheckScreendump
   CheckRunVimInTerminal

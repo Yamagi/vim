@@ -1259,6 +1259,8 @@ win_line(
 					    // part of the line starts
     int		text_prop_first_right = -1; // index of the first "right"
 					    // aligned text prop after the line
+    int		text_prop_text_row = startrow; // row where the text of the
+					    // line starts, after "above"
     int		saved_search_attr = 0;	// search_attr to be used when n_extra
 					// goes to zero
     int		saved_area_attr = 0;	// idem for area_attr
@@ -2284,11 +2286,11 @@ win_line(
 			    break;
 			else
 			{
-			    // With 'nowrap' and not in the first screen line
-			    // only "below" text prop and "right" text prop that
-			    // goes below can show.
+			    // With 'nowrap' and not in the screen line with
+			    // the text only "below" text prop and "right" text
+			    // prop that goes below can show.
 			    active = wp->w_p_wrap
-				  || wlv.row == startrow
+				  || wlv.row == text_prop_text_row
 				  || (tp->tp_flags & TP_FLAG_ALIGN_BELOW)
 				  || (text_prop_first_right >= 0
 				      && text_prop_next != text_prop_first_right
@@ -4587,6 +4589,11 @@ win_line(
 #endif
 	    ++wlv.row;
 	    ++wlv.screen_row;
+#ifdef FEAT_PROP_POPUP
+	    // The text of the line starts below the "above" text props.
+	    if (text_prop_above)
+		text_prop_text_row = wlv.row;
+#endif
 
 	    // When not wrapping and finished diff lines, break here.
 	    if (!wp->w_p_wrap
